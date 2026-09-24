@@ -3,17 +3,18 @@
     <div class="page-head">
       <div>
         <h2>排行榜</h2>
-        <p class="page-sub">和家庭一起进步，看得见的坚持</p>
+        <p class="page-sub">按每位成员的真实记账数据统计，停用成员不计入排行</p>
       </div>
     </div>
 
     <div class="rank-grid">
       <div class="card rank-col">
         <h3 class="rank-title">🔥 记账坚持榜</h3>
-        <p class="rank-sub">按连续记账天数排序</p>
+        <p class="rank-sub">按当前连续记账天数排序</p>
         <div class="rank-list">
-          <div v-for="(r, i) in streakList" :key="r.name" class="rank-item">
+          <div v-for="(r, i) in streakList" :key="r.id" class="rank-item">
             <span class="rank-no" :class="{ top: i < 3 }">{{ i + 1 }}</span>
+            <span class="rank-avatar" :style="{ background: r.color }">{{ r.name.slice(0, 1) }}</span>
             <span class="rank-name">{{ r.name }}</span>
             <div class="rank-bar-track">
               <div class="rank-bar" :style="{ width: r.pct + '%' }"></div>
@@ -21,14 +22,16 @@
             <span class="rank-val">{{ r.value }} 天</span>
           </div>
         </div>
+        <div class="rank-empty" v-if="streakList.length === 0">暂无启用中的成员</div>
       </div>
 
       <div class="card rank-col">
         <h3 class="rank-title">🐢 节约达人榜</h3>
-        <p class="rank-sub">按储蓄率排序</p>
+        <p class="rank-sub">按本月储蓄率（（收入-支出）/收入）排序</p>
         <div class="rank-list">
-          <div v-for="(r, i) in savingList" :key="r.name" class="rank-item">
+          <div v-for="(r, i) in savingList" :key="r.id" class="rank-item">
             <span class="rank-no" :class="{ top: i < 3 }">{{ i + 1 }}</span>
+            <span class="rank-avatar" :style="{ background: r.color }">{{ r.name.slice(0, 1) }}</span>
             <span class="rank-name">{{ r.name }}</span>
             <div class="rank-bar-track">
               <div class="rank-bar saving" :style="{ width: r.pct + '%' }"></div>
@@ -44,56 +47,59 @@
 
 <script setup>
 import { computed } from 'vue'
-import { useStore, controllersApi } from '../data/store.js'
+import { useStore } from '../data/store.js'
+import { todayStr } from '../core/utils.js'
 
 const store = useStore()
-const { achievement } = controllersApi
 
-const members = ['张先生', '李女士', '小家庭', '爸妈', '孩子']
+const activeMembers = computed(() => store.members.filter((m) => m.active !== false))
 
-const now = new Date()
-const seed = now.getFullYear() * 100 + (now.getMonth() + 1)
+// 每位成员名下的非转账账单（转账是家庭内部资金流动，不计入个人收支）
+const memberTxs = (memberId) => store.transactions.filter((t) => t.memberId === memberId && t.type !== 'transfer')
 
-function pseudoRandom(n) {
-  return Math.abs(Math.sin(n * 127.1 + 311.7) * 43758.5453) % 1
+function currentStreakOf(memberId) {
+  const days = new Set(memberTxs(memberId).map((t) => t.date))
+  let streak = 0
+  for (let i = 0; i < 365; i++) {
+    if (days.has(todayStr(-i))) streak++
+    else break
+  }
+  return streak
 }
 
-const streakList = computed(() => {
-  const myStreak = achievement.computeCurrentStreak()
-  const rows = members.map((name, i) => ({
-    name,
-    value: 12 + Math.floor(pseudoRandom(seed + i) * 40)
-  }))
-  rows.push({ name: '我们', value: myStreak })
-  return rows
-    .sort((a, b) => b.value - a.value)
-    .map((r) => ({ ...r, pct: Math.min(100, Math.round((r.value / rows[0].value) * 100)) }))
-})
-
-const savingList = computed(() => {
-  const { income, expense } = storeCurrentMonth()
-  const myRate = income > 0 ? Math.round(((income - expense) / income) * 100) : 0
-  const rows = members.map((name, i) => ({
-    name,
-    value: Math.max(0, Math.min(80, Math.round(pseudoRandom(seed * 3 + i) * 60 + 10)))
-  }))
-  rows.push({ name: '我们', value: Math.max(0, myRate) })
-  return rows
-    .sort((a, b) => b.value - a.value)
-    .map((r) => ({ ...r, pct: Math.min(100, Math.round((r.value / rows[0].value) * 100)) }))
-})
-
-function storeCurrentMonth() {
-  const month = new Date().toISOString().slice(0, 7)
+function monthlySavingRateOf(memberId, month) {
   let income = 0
   let expense = 0
-  for (const t of store.transactions) {
-    if (!t.date.startsWith(month) || t.type === 'transfer') continue
+  for (const t of memberTxs(memberId)) {
+    if (!t.date.startsWith(month)) continue
     if (t.type === 'income') income += t.amount
     else expense += t.amount
   }
-  return { income, expense }
+  if (income <= 0) return 0
+  return Math.max(0, Math.round(((income - expense) / income) * 100))
 }
+
+function withPct(rows) {
+  const max = rows.reduce((m, r) => Math.max(m, r.value), 0)
+  return rows.map((r) => ({ ...r, pct: max > 0 ? Math.min(100, Math.round((r.value / max) * 100)) : 0 }))
+}
+
+const streakList = computed(() =>
+  withPct(
+    activeMembers.value
+      .map((m) => ({ id: m.id, name: m.name, color: m.color, value: currentStreakOf(m.id) }))
+      .sort((a, b) => b.value - a.value || a.name.localeCompare(b.name, 'zh'))
+  )
+)
+
+const savingList = computed(() => {
+  const month = new Date().toISOString().slice(0, 7)
+  return withPct(
+    activeMembers.value
+      .map((m) => ({ id: m.id, name: m.name, color: m.color, value: monthlySavingRateOf(m.id, month) }))
+      .sort((a, b) => b.value - a.value || a.name.localeCompare(b.name, 'zh'))
+  )
+})
 </script>
 
 <style scoped>
@@ -137,10 +143,25 @@ function storeCurrentMonth() {
   background: var(--accent);
   color: #fff;
 }
+.rank-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 800;
+  flex-shrink: 0;
+}
 .rank-name {
-  width: 52px;
+  width: 60px;
   flex-shrink: 0;
   font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .rank-bar-track {
   flex: 1;

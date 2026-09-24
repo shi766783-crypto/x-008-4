@@ -7,6 +7,7 @@ export const emptyTransactionForm = () => ({
   type: TRANSACTION_TYPES.EXPENSE,
   accountId: '',
   toAccountId: '',
+  memberId: '',
   amount: '',
   category: '餐饮',
   date: todayStr(),
@@ -32,6 +33,7 @@ export function normalizeTransaction(form) {
   const base = {
     id: uid(),
     amount,
+    memberId: form.memberId || '',
     date: form.date || todayStr(),
     note: String(form.note || '').trim(),
     isLarge: Boolean(form.isLarge),

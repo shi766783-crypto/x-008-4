@@ -7,6 +7,7 @@ const store = reactive({
   budgets: [],
   goals: [],
   user: {},
+  members: [],
   achievements: [],
   points: 0,
   claimedChallenges: []
@@ -18,6 +19,7 @@ const STORE_MAP = {
   budgets: () => controllers.budget.loadBudgets(),
   goals: () => controllers.savingsGoal.loadGoals(),
   user: () => controllers.user.loadUser(),
+  members: () => controllers.member.loadMembers(),
   achievements: () => controllers.achievement.loadAchievements(),
   points: () => controllers.challenge.getPoints(),
   claimedChallenges: () => controllers.challenge.loadClaimed()

@@ -36,6 +36,7 @@
 <script>
 import { ref, computed } from 'vue'
 import { useStore, refresh, controllersApi } from '../data/store.js'
+import { activeTab, navigate } from '../core/appNav.js'
 import IconChart from './IconChart.vue'
 import DashboardView from '../views/DashboardView.vue'
 import AccountsView from '../views/AccountsView.vue'
@@ -44,6 +45,7 @@ import BudgetView from '../views/BudgetView.vue'
 import SavingsGoalsView from '../views/SavingsGoalsView.vue'
 import ChallengesView from '../views/ChallengesView.vue'
 import RankingsView from '../views/RankingsView.vue'
+import MembersView from '../views/MembersView.vue'
 import ProfileView from '../views/ProfileView.vue'
 
 const NAV = [
@@ -54,6 +56,7 @@ const NAV = [
   { key: 'goals', label: '储蓄目标', icon: 'list' },
   { key: 'challenges', label: '记账挑战', icon: 'trophy' },
   { key: 'rankings', label: '排行榜', icon: 'chart' },
+  { key: 'members', label: '家庭成员', icon: 'members' },
   { key: 'profile', label: '个人中心', icon: 'user' }
 ]
 
@@ -65,6 +68,7 @@ const VIEWS = {
   goals: SavingsGoalsView,
   challenges: ChallengesView,
   rankings: RankingsView,
+  members: MembersView,
   profile: ProfileView
 }
 
@@ -72,9 +76,13 @@ export default {
   components: { IconChart, ...VIEWS },
   setup() {
     const store = useStore()
-    const tab = ref('dashboard')
+    const tab = activeTab
     const sidebarOpen = ref(false)
 
+    if (!controllersApi.seed.hasSeeded()) {
+      controllersApi.seed.seedDemoData()
+    }
+    controllersApi.member.ensureMembers()
     refresh()
     controllersApi.achievement.updateAchievements()
     refresh()
@@ -82,7 +90,7 @@ export default {
     const currentView = computed(() => VIEWS[tab.value])
     const currentLabel = computed(() => NAV.find((n) => n.key === tab.value)?.label || '')
     const go = (key) => {
-      tab.value = key
+      navigate(key)
       sidebarOpen.value = false
     }
     const resetAll = () => {

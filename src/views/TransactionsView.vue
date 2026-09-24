@@ -14,6 +14,13 @@
         <option value="">全部类型</option>
         <option v-for="(label, key) in TYPE_LABELS" :key="key" :value="key">{{ label }}</option>
       </select>
+      <select v-model="filters.memberId" class="filter-select">
+        <option value="">全部成员</option>
+        <option v-for="m in store.members" :key="m.id" :value="m.id" :disabled="m.active === false">
+          {{ m.name }}{{ m.active === false ? '（已停用）' : '' }}
+        </option>
+        <option value="__none__">未分配</option>
+      </select>
       <select v-model="filters.category" class="filter-select">
         <option value="">全部类别</option>
         <optgroup v-if="filters.type !== 'transfer'" label="收入">
@@ -37,6 +44,7 @@
           <div class="tx-main">
             <div class="tx-title">
               <span>{{ renderTitle(t) }}</span>
+              <span class="member-chip" :class="{ none: !t.memberId }">{{ memberNameOf(t.memberId) }}</span>
               <span v-if="t.isLarge" class="badge badge-large">大额</span>
             </div>
             <div class="tx-meta">{{ renderMeta(t) }}</div>
@@ -71,6 +79,14 @@
           <select v-model="form.toAccountId" required>
             <option value="" disabled>选择转入账户</option>
             <option v-for="a in otherAccounts" :key="a.id" :value="a.id">{{ a.name }}</option>
+          </select>
+        </label>
+
+        <label class="field">
+          <span>归属成员</span>
+          <select v-model="form.memberId">
+            <option value="">未分配</option>
+            <option v-for="m in activeMembers" :key="m.id" :value="m.id">{{ m.name }}</option>
           </select>
         </label>
 
@@ -126,7 +142,10 @@ const TYPE_LABELS = { income: '收入', expense: '支出', transfer: '转账' }
 const modalOpen = ref(false)
 const editing = ref(null)
 const form = reactive(txApi.emptyTransactionForm())
-const filters = reactive({ keyword: '', type: '', category: '', largeOnly: false })
+const filters = reactive({ keyword: '', type: '', category: '', memberId: '', largeOnly: false })
+
+const activeMembers = computed(() => store.members.filter((m) => m.active !== false))
+const memberNameOf = (id) => store.members.find((m) => m.id === id)?.name || '未分配'
 
 const switchType = (type) => {
   form.type = type
@@ -142,6 +161,8 @@ const visibleTransactions = computed(() => {
   if (filters.type) list = list.filter((t) => t.type === filters.type)
   if (filters.category) list = list.filter((t) => t.category === filters.category)
   if (filters.largeOnly) list = list.filter((t) => t.isLarge)
+  if (filters.memberId === '__none__') list = list.filter((t) => !t.memberId)
+  else if (filters.memberId) list = list.filter((t) => t.memberId === filters.memberId)
   if (filters.keyword) {
     const k = filters.keyword.trim().toLowerCase()
     list = list.filter((t) => (t.note || '').toLowerCase().includes(k) || (t.category || '').toLowerCase().includes(k))
@@ -166,7 +187,12 @@ const renderMeta = (t) => {
 
 const openCreate = () => {
   editing.value = null
-  Object.assign(form, txApi.emptyTransactionForm(), { accountId: store.accounts[0]?.id || '', toAccountId: store.accounts[1]?.id || '', date: todayStr() })
+  Object.assign(form, txApi.emptyTransactionForm(), {
+    accountId: store.accounts[0]?.id || '',
+    toAccountId: store.accounts[1]?.id || '',
+    memberId: activeMembers.value[0]?.id || '',
+    date: todayStr()
+  })
   modalOpen.value = true
 }
 
@@ -266,6 +292,18 @@ const remove = (t) => {
   gap: 8px;
   font-weight: 600;
   font-size: 14px;
+}
+.member-chip {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+  background: rgba(79, 141, 249, 0.12);
+  border-radius: 999px;
+  padding: 1px 8px;
+}
+.member-chip.none {
+  color: var(--text-secondary);
+  background: var(--bg-elevated);
 }
 .tx-meta {
   font-size: 12px;
