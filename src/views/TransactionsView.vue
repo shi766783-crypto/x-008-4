@@ -23,6 +23,11 @@
           <option v-for="c in EXPENSE_CATEGORIES" :key="c" :value="c">{{ c }}</option>
         </optgroup>
       </select>
+      <select v-model="filters.memberId" class="filter-select">
+        <option value="">全部成员</option>
+        <option v-for="m in store.members" :key="m.id" :value="m.id">{{ m.name }}{{ m.active ? '' : '（已停用）' }}</option>
+        <option value="__none__">未归属</option>
+      </select>
       <label class="check">
         <input type="checkbox" v-model="filters.largeOnly" />
         仅看大额
@@ -38,6 +43,7 @@
             <div class="tx-title">
               <span>{{ renderTitle(t) }}</span>
               <span v-if="t.isLarge" class="badge badge-large">大额</span>
+              <span class="member-chip" :class="{ deleted: memberLabel(t).deleted, none: !t.memberId && !t.memberName }">{{ memberLabel(t).name }}</span>
             </div>
             <div class="tx-meta">{{ renderMeta(t) }}</div>
           </div>
@@ -87,6 +93,14 @@
         </label>
 
         <label class="field">
+          <span>归属成员</span>
+          <select v-model="form.memberId">
+            <option value="">未归属（家庭公共）</option>
+            <option v-for="m in activeMembers" :key="m.id" :value="m.id">{{ m.name }}</option>
+          </select>
+        </label>
+
+        <label class="field">
           <span>日期</span>
           <input v-model="form.date" type="date" required />
         </label>
@@ -119,14 +133,17 @@ import { INCOME_CATEGORIES, EXPENSE_CATEGORIES, TRANSACTION_TYPES } from '../cor
 import Modal from '../components/Modal.vue'
 
 const store = useStore()
-const { transaction: txApi } = controllersApi
+const { transaction: txApi, member: memberApi } = controllersApi
 
 const TYPE_LABELS = { income: '收入', expense: '支出', transfer: '转账' }
 
 const modalOpen = ref(false)
 const editing = ref(null)
 const form = reactive(txApi.emptyTransactionForm())
-const filters = reactive({ keyword: '', type: '', category: '', largeOnly: false })
+const filters = reactive({ keyword: '', type: '', category: '', memberId: '', largeOnly: false })
+
+const activeMembers = computed(() => store.members.filter((m) => m.active))
+const memberLabel = (t) => memberApi.memberNameOf(store.members, t)
 
 const switchType = (type) => {
   form.type = type
@@ -142,6 +159,8 @@ const visibleTransactions = computed(() => {
   if (filters.type) list = list.filter((t) => t.type === filters.type)
   if (filters.category) list = list.filter((t) => t.category === filters.category)
   if (filters.largeOnly) list = list.filter((t) => t.isLarge)
+  if (filters.memberId === '__none__') list = list.filter((t) => !t.memberId)
+  else if (filters.memberId) list = list.filter((t) => t.memberId === filters.memberId)
   if (filters.keyword) {
     const k = filters.keyword.trim().toLowerCase()
     list = list.filter((t) => (t.note || '').toLowerCase().includes(k) || (t.category || '').toLowerCase().includes(k))
@@ -166,7 +185,12 @@ const renderMeta = (t) => {
 
 const openCreate = () => {
   editing.value = null
-  Object.assign(form, txApi.emptyTransactionForm(), { accountId: store.accounts[0]?.id || '', toAccountId: store.accounts[1]?.id || '', date: todayStr() })
+  Object.assign(form, txApi.emptyTransactionForm(), {
+    accountId: store.accounts[0]?.id || '',
+    toAccountId: store.accounts[1]?.id || '',
+    memberId: store.members.find((m) => m.active)?.id || '',
+    date: todayStr()
+  })
   modalOpen.value = true
 }
 
@@ -266,6 +290,22 @@ const remove = (t) => {
   gap: 8px;
   font-weight: 600;
   font-size: 14px;
+}
+.member-chip {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(79, 141, 249, 0.12);
+  color: var(--accent);
+}
+.member-chip.none {
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+}
+.member-chip.deleted {
+  background: rgba(224, 82, 96, 0.1);
+  color: var(--expense);
 }
 .tx-meta {
   font-size: 12px;

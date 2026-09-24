@@ -11,7 +11,8 @@ export const emptyTransactionForm = () => ({
   category: '餐饮',
   date: todayStr(),
   note: '',
-  isLarge: false
+  isLarge: false,
+  memberId: ''
 })
 
 export function loadTransactions() {
@@ -35,6 +36,7 @@ export function normalizeTransaction(form) {
     date: form.date || todayStr(),
     note: String(form.note || '').trim(),
     isLarge: Boolean(form.isLarge),
+    memberId: String(form.memberId || ''),
     createdAt: Date.now()
   }
   if (form.type === TRANSACTION_TYPES.TRANSFER) {
@@ -44,14 +46,15 @@ export function normalizeTransaction(form) {
 }
 
 function applyTransfer(accounts, fromAccountId, toAccountId, amount) {
+  const balanceOf = (a) => (a.balance == null ? a.initialBalance || 0 : a.balance)
   return accounts.map((a) => {
-    if (a.id === fromAccountId) return { ...a, balance: a.balance - amount }
-    if (a.id === toAccountId) return { ...a, balance: a.balance + amount }
+    if (a.id === fromAccountId) return { ...a, balance: balanceOf(a) - amount }
+    if (a.id === toAccountId) return { ...a, balance: balanceOf(a) + amount }
     return a
   })
 }
 
-function reconcileAll() {
+export function reconcileAll() {
   const accounts = loadAccounts()
   const transactions = loadTransactions()
   const balances = new Map(accounts.map((a) => [a.id, a.initialBalance]))
@@ -71,11 +74,12 @@ export function addTransaction(form) {
   if (!form.accountId || !form.amount) return null
   if (form.type === TRANSACTION_TYPES.TRANSFER && form.accountId === form.toAccountId) return null
   const transaction = normalizeTransaction(form)
+  const balanceOf = (a) => (a.balance == null ? a.initialBalance || 0 : a.balance)
   const nextAccounts = form.type === TRANSACTION_TYPES.TRANSFER
     ? applyTransfer(accounts, form.accountId, form.toAccountId, transaction.amount)
     : accounts.map((a) =>
         a.id === form.accountId
-          ? { ...a, balance: a.balance + (form.type === TRANSACTION_TYPES.INCOME ? transaction.amount : -transaction.amount) }
+          ? { ...a, balance: balanceOf(a) + (form.type === TRANSACTION_TYPES.INCOME ? transaction.amount : -transaction.amount) }
           : a
       )
   saveAccounts(nextAccounts)

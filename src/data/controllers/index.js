@@ -1,5 +1,6 @@
 export * as account from './accountController.js'
 export * as transaction from './transactionController.js'
+export * as member from './memberController.js'
 export * as budget from './budgetController.js'
 export * as savingsGoal from './savingsGoalController.js'
 export * as report from './reportController.js'
